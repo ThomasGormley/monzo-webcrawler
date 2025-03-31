@@ -59,7 +59,21 @@ export class Crawler {
       }
     }
 
-    return toCrawl;
+    const dedupedToCrawl = [...new Set(toCrawl)];
+
+    console.log(`${url}`);
+
+    for (const u of dedupedToCrawl) {
+      console.log(` - ${u}`);
+    }
+
+    return this.#crawlUrls(dedupedToCrawl);
+  }
+
+  async #crawlUrls(urls: string[]) {
+    for (const url of urls) {
+      this.#crawlUrl(url);
+    }
   }
 }
 
