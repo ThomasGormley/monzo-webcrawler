@@ -36,6 +36,10 @@ export class JobProcessor {
     return this.#queue.length;
   }
 
+  processing() {
+    return this.#shouldProcess;
+  }
+
   #enqueueWithRetries(
     job: Job,
     { retryCount, delay }: { retryCount: number; delay?: number },

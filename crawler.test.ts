@@ -8,7 +8,7 @@ let serverUrl: string;
 beforeAll(async () => {
   server = Bun.serve({
     port: 3000,
-    fetch(req) {
+    async fetch(req) {
       const url = new URL(req.url);
       if (url.pathname === "/test_page_1.html") {
         return new Response(
@@ -69,6 +69,14 @@ beforeAll(async () => {
           <a href="/test_page_1.html">Link</a>
         `,
         );
+      } else if (url.pathname === "/slow_handler.html") {
+        await new Promise((resolve) => setTimeout(resolve, 10_000));
+        return new Response(
+          `
+          <a href="/test_page_1.html">Link</a>
+        `,
+          { headers: { "Content-Type": "text/html" } },
+        );
       }
       return new Response("404!", { status: 404 });
     },
@@ -122,4 +130,23 @@ test("it does nothing with non-HTML pages", async () => {
   expect(crawler.visited.has(`${serverUrl}/not_html.txt`)).toBe(true);
 
   crawler.stop();
+});
+
+test("it stops after configured timeout", async () => {
+  const abortController = new AbortController();
+  const timeoutMs = 200;
+  const crawler = new Crawler({
+    timeoutMs,
+    abortController,
+  });
+  crawler.crawl(`${serverUrl}/slow_handler.html`);
+
+  while (crawler.crawling()) {
+    await new Promise((resolve) => setTimeout(resolve, timeoutMs));
+  }
+
+  expect(crawler.timedout()).toBe(true);
+  expect(abortController.signal.aborted).toBe(true);
+  expect(crawler.visited.size).toBe(0);
+  expect(crawler.visited.has(`${serverUrl}/slow_handler.html`)).toBe(false);
 });
