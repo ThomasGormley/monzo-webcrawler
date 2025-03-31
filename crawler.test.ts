@@ -1,6 +1,6 @@
 import { test, expect, beforeAll, afterAll } from "bun:test";
 import type { Server } from "bun";
-import { Crawler } from ".";
+import { Crawler } from "./crawler";
 
 let server: Server;
 let serverUrl: string;
@@ -82,28 +82,44 @@ afterAll(() => {
 
 test("it visits all pages", async () => {
   const crawler = new Crawler();
+  crawler.crawl(`${serverUrl}/test_page_1.html`);
 
-  await crawler.crawl(`${serverUrl}/test_page_1.html`);
+  while (crawler.crawling()) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
 
   expect(crawler.visited.size).toBe(3);
   expect(crawler.visited.has(`${serverUrl}/test_page_1.html`)).toBe(true);
   expect(crawler.visited.has(`${serverUrl}/test_page_2.html`)).toBe(true);
   expect(crawler.visited.has(`${serverUrl}/test_page_3.html`)).toBe(true);
+
+  crawler.stop();
 });
 
 test("it does not visit external links", async () => {
   const crawler = new Crawler();
+  crawler.crawl(`${serverUrl}/test_page_with_external_link.html`);
 
-  await crawler.crawl(`${serverUrl}/test_page_with_external_link.html`);
+  while (crawler.crawling()) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
 
   expect(crawler.visited.size).toBe(1);
   expect(crawler.visited.has(`https://thomasgormley.dev`)).toBe(false);
+
+  crawler.stop();
 });
 
 test("it does nothing with non-HTML pages", async () => {
   const crawler = new Crawler();
-  await crawler.crawl(`${serverUrl}/not_html.txt`);
+  crawler.crawl(`${serverUrl}/not_html.txt`);
+
+  while (crawler.crawling()) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
 
   expect(crawler.visited.size).toBe(1);
   expect(crawler.visited.has(`${serverUrl}/not_html.txt`)).toBe(true);
+
+  crawler.stop();
 });
