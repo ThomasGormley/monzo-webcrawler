@@ -1,3 +1,5 @@
+import { load } from "cheerio";
+
 export class Crawler {
   visited = new Set<string>();
   #maxConcurrent: number = 5;
@@ -22,9 +24,42 @@ export class Crawler {
 
     this.visited.add(url);
 
-    const body = res.text();
+    const contentType = res.headers.get("content-type");
 
-    return body;
+    // could also check any text, e.g. markdown
+    if (!contentType?.includes("text/html")) {
+      return;
+    }
+
+    const resUrl = new URL(res.url);
+
+    const isSameDomain = resUrl.host === reqUrl.host;
+    if (!isSameDomain) {
+      return;
+    }
+
+    const body = await res.text();
+    const $ = load(body);
+
+    const toCrawl: string[] = [];
+    for (const element of $("a[href]")) {
+      const href = $(element).attr("href");
+      if (!href) {
+        return;
+      }
+
+      try {
+        const resolvedUrl = new URL(href, reqUrl);
+        const isMatchingDomain = resolvedUrl.host === reqUrl.host;
+        if (isMatchingDomain) {
+          toCrawl.push(resolvedUrl.href);
+        }
+      } catch {
+        // skip invalid URLs
+      }
+    }
+
+    return toCrawl;
   }
 }
 
