@@ -1,4 +1,4 @@
-import { test, expect, beforeAll, afterAll } from "bun:test";
+import { test, expect, beforeAll, afterAll, mock } from "bun:test";
 import type { Server } from "bun";
 import { Crawler } from "./crawler";
 
@@ -159,4 +159,30 @@ test("it stops after configured timeout", async () => {
   expect(crawler.urlManager.hasVisited(`${serverUrl}/slow_handler.html`)).toBe(
     false,
   );
+});
+
+test("it calls onVisited when it visits a URL", async () => {
+  let gotArgs = { url: "", urls: [""] } satisfies {
+    url: string;
+    urls: string[];
+  };
+  let callCount = 0;
+  const crawler = new Crawler({
+    onVisited: (args) => {
+      callCount++;
+      gotArgs = args;
+    },
+  });
+
+  crawler.crawl(`${serverUrl}/test_page_1.html`);
+
+  while (crawler.crawling()) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  expect(callCount).toBe(3);
+  expect(gotArgs).toEqual({
+    url: `${serverUrl}/test_page_3.html`,
+    urls: [`${serverUrl}/test_page_1.html`],
+  });
 });

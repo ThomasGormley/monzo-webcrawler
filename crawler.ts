@@ -11,7 +11,7 @@ type CrawlerOptions = {
 };
 
 type CrawlerEvents = {
-  visited: { url: string; status: number; urls: string[] }[];
+  visited: { url: string; urls: string[] }[];
 };
 
 export class Crawler {
@@ -65,80 +65,94 @@ export class Crawler {
       abortSignal: AbortSignal;
     },
   ) {
-    const shouldCrawl = !this.urlManager.hasVisited(url);
+    const shouldCrawl =
+      !this.urlManager.hasVisited(url) && !this.urlManager.inQueue(url);
 
     if (!shouldCrawl) {
       return;
     }
 
+    this.urlManager.queued(url);
     this.#processor.enqueue(async () => {
-      if (this.#timedout) {
-        return;
-      }
-
-      const reqUrl = new URL(url);
-      const res = await fetch(url, {
-        headers: { "user-agent": "Mz-Webcrawler/1.0 (testing)" },
-        signal: opts.abortSignal,
-      });
-
-      switch (res.status % 100) {
-        case 4:
-          this.urlManager.error(url, res.status);
-          // Client error, don’t retry
+      try {
+        if (this.#timedout) {
           return;
-        case 5:
-          this.urlManager.error(url, res.status);
-          // server error, throw to retry
-          throw new Error(`Failed to fetch ${url}, status: ${res.statusText}`);
-        default: // fallthrough
-      }
-
-      this.urlManager.persistVisited(url);
-      const resUrl = new URL(res.url);
-
-      const redirected = resUrl.host !== reqUrl.host;
-      if (redirected) {
-        this.#emitter.emit("visited", { url, status: res.status, urls: [] });
-        return;
-      }
-
-      const contentType = res.headers.get("content-type");
-      if (!contentType?.includes("text/html")) {
-        this.#emitter.emit("visited", { url, status: res.status, urls: [] });
-        return;
-      }
-
-      const body = await res.text();
-      const $ = load(body);
-
-      const toCrawl: string[] = [];
-      for (const element of $("a[href]")) {
-        const href = $(element).attr("href");
-        if (!href) {
-          continue;
         }
 
-        try {
-          const resolvedUrl = new URL(href, reqUrl);
-          const isMatchingDomain = resolvedUrl.host === reqUrl.host;
-          if (isMatchingDomain) {
-            toCrawl.push(resolvedUrl.href);
+        // Intentionally lookup the visited state again for resiliency against
+        // race condition where a URL is visited while the duplicate job is enqueued
+        const visitedWhileQueued = !this.urlManager.hasVisited(url);
+        if (!visitedWhileQueued) {
+          return;
+        }
+
+        const reqUrl = new URL(url);
+        const res = await fetch(url, {
+          headers: { "user-agent": "Mz-Webcrawler/1.0 (testing)" },
+          signal: opts.abortSignal,
+        });
+
+        switch (res.status % 100) {
+          case 4:
+            this.urlManager.error(url, res.status);
+            // Client error, don’t retry
+            return;
+          case 5:
+            this.urlManager.error(url, res.status);
+            // server error, throw to retry
+            throw new Error(
+              `Failed to fetch ${url}, status: ${res.statusText}`,
+            );
+          default: // fallthrough
+        }
+
+        this.urlManager.persistVisited(url);
+        const resUrl = new URL(res.url);
+
+        const redirected = resUrl.host !== reqUrl.host;
+        if (redirected) {
+          this.#emitter.emit("visited", { url, urls: [] });
+          return;
+        }
+
+        const contentType = res.headers.get("content-type");
+        if (!contentType?.includes("text/html")) {
+          this.#emitter.emit("visited", { url, urls: [] });
+          return;
+        }
+
+        const body = await res.text();
+        const $ = load(body);
+
+        const toCrawl: string[] = [];
+        for (const element of $("a[href]")) {
+          const href = $(element).attr("href");
+          if (!href) {
+            continue;
           }
-        } catch {
-          // skip invalid URLs
+
+          try {
+            const resolvedUrl = new URL(href, reqUrl);
+            const isMatchingDomain = resolvedUrl.host === reqUrl.host;
+            if (isMatchingDomain) {
+              toCrawl.push(resolvedUrl.href);
+            }
+          } catch {
+            // skip invalid URLs
+          }
         }
+
+        const dedupedToCrawl = [...new Set(toCrawl)];
+
+        this.#emitter.emit("visited", {
+          url,
+          urls: dedupedToCrawl,
+        });
+
+        this.#crawlUrls(dedupedToCrawl, opts);
+      } finally {
+        this.urlManager.dequeued(url);
       }
-
-      const dedupedToCrawl = [...new Set(toCrawl)];
-
-      this.#emitter.emit("visited", {
-        url,
-        status: res.status,
-        urls: dedupedToCrawl,
-      });
-
-      this.#crawlUrls(dedupedToCrawl, opts);
     });
   }
 

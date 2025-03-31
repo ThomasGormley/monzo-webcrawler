@@ -41,4 +41,8 @@ export class URLManager {
   dequeued(url: string) {
     this.#queuedUrls.delete(url);
   }
+
+  inQueue(url: string) {
+    return this.#queuedUrls.has(url);
+  }
 }
