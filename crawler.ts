@@ -1,28 +1,36 @@
 import { load } from "cheerio/slim";
 import { JobProcessor } from "./job-processor";
+import { EventEmitter } from "events";
+import { URLManager } from "./url-manager";
 
 type CrawlerOptions = {
-  timeoutMs?: number;
-  abortController?: AbortController;
+  timeoutMs: number;
+  abortController: AbortController;
+  urlManager?: URLManager;
+  onVisited?: (args: CrawlerEvents["visited"][number]) => void;
 };
 
-const defaultCrawlerOptions = {
-  timeoutMs: 5000,
-  abortController: new AbortController(),
-} satisfies CrawlerOptions;
+type CrawlerEvents = {
+  visited: { url: string; status: number; urls: string[] }[];
+};
 
 export class Crawler {
-  visited = new Set<string>();
+  urlManager: URLManager = new URLManager();
   #processor = new JobProcessor();
   #timedout = false;
-  #options = defaultCrawlerOptions satisfies CrawlerOptions;
+  #options: CrawlerOptions;
+  #emitter = new EventEmitter<CrawlerEvents>();
 
-  constructor(opts: CrawlerOptions = {}) {
+  constructor(opts: Partial<CrawlerOptions> = {}) {
     this.#options = {
-      ...defaultCrawlerOptions,
+      timeoutMs: 5000,
       abortController: new AbortController(),
       ...opts,
     } satisfies CrawlerOptions;
+
+    if (this.#options.onVisited) {
+      this.#emitter.on("visited", this.#options.onVisited);
+    }
   }
 
   crawl(url: string) {
@@ -57,7 +65,7 @@ export class Crawler {
       abortSignal: AbortSignal;
     },
   ) {
-    const shouldCrawl = !this.visited.has(url);
+    const shouldCrawl = !this.urlManager.hasVisited(url);
 
     if (!shouldCrawl) {
       return;
@@ -74,17 +82,30 @@ export class Crawler {
         signal: opts.abortSignal,
       });
 
-      this.visited.add(url);
+      switch (res.status % 100) {
+        case 4:
+          this.urlManager.error(url, res.status);
+          // Client error, don’t retry
+          return;
+        case 5:
+          this.urlManager.error(url, res.status);
+          // server error, throw to retry
+          throw new Error(`Failed to fetch ${url}, status: ${res.statusText}`);
+        default: // fallthrough
+      }
 
-      const contentType = res.headers.get("content-type");
-      if (!contentType?.includes("text/html")) {
+      this.urlManager.persistVisited(url);
+      const resUrl = new URL(res.url);
+
+      const redirected = resUrl.host !== reqUrl.host;
+      if (redirected) {
+        this.#emitter.emit("visited", { url, status: res.status, urls: [] });
         return;
       }
 
-      const resUrl = new URL(res.url);
-
-      const isSameDomain = resUrl.host === reqUrl.host;
-      if (!isSameDomain) {
+      const contentType = res.headers.get("content-type");
+      if (!contentType?.includes("text/html")) {
+        this.#emitter.emit("visited", { url, status: res.status, urls: [] });
         return;
       }
 
@@ -111,11 +132,11 @@ export class Crawler {
 
       const dedupedToCrawl = [...new Set(toCrawl)];
 
-      console.log(`${url}`);
-
-      for (const u of dedupedToCrawl) {
-        console.log(` - ${u}`);
-      }
+      this.#emitter.emit("visited", {
+        url,
+        status: res.status,
+        urls: dedupedToCrawl,
+      });
 
       this.#crawlUrls(dedupedToCrawl, opts);
     });

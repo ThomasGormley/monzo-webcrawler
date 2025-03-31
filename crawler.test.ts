@@ -96,10 +96,16 @@ test("it visits all pages", async () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
-  expect(crawler.visited.size).toBe(3);
-  expect(crawler.visited.has(`${serverUrl}/test_page_1.html`)).toBe(true);
-  expect(crawler.visited.has(`${serverUrl}/test_page_2.html`)).toBe(true);
-  expect(crawler.visited.has(`${serverUrl}/test_page_3.html`)).toBe(true);
+  expect(crawler.urlManager.allVisited().length).toBe(3);
+  expect(crawler.urlManager.hasVisited(`${serverUrl}/test_page_1.html`)).toBe(
+    true,
+  );
+  expect(crawler.urlManager.hasVisited(`${serverUrl}/test_page_2.html`)).toBe(
+    true,
+  );
+  expect(crawler.urlManager.hasVisited(`${serverUrl}/test_page_3.html`)).toBe(
+    true,
+  );
 
   crawler.stop();
 });
@@ -112,8 +118,10 @@ test("it does not visit external links", async () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
-  expect(crawler.visited.size).toBe(1);
-  expect(crawler.visited.has(`https://thomasgormley.dev`)).toBe(false);
+  expect(crawler.urlManager.allVisited().length).toBe(1);
+  expect(crawler.urlManager.hasVisited(`https://thomasgormley.dev`)).toBe(
+    false,
+  );
 
   crawler.stop();
 });
@@ -126,8 +134,8 @@ test("it does nothing with non-HTML pages", async () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
-  expect(crawler.visited.size).toBe(1);
-  expect(crawler.visited.has(`${serverUrl}/not_html.txt`)).toBe(true);
+  expect(crawler.urlManager.allVisited().length).toBe(1);
+  expect(crawler.urlManager.hasVisited(`${serverUrl}/not_html.txt`)).toBe(true);
 
   crawler.stop();
 });
@@ -147,6 +155,8 @@ test("it stops after configured timeout", async () => {
 
   expect(crawler.timedout()).toBe(true);
   expect(abortController.signal.aborted).toBe(true);
-  expect(crawler.visited.size).toBe(0);
-  expect(crawler.visited.has(`${serverUrl}/slow_handler.html`)).toBe(false);
+  expect(crawler.urlManager.allVisited().length).toBe(0);
+  expect(crawler.urlManager.hasVisited(`${serverUrl}/slow_handler.html`)).toBe(
+    false,
+  );
 });
