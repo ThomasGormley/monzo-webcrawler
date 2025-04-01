@@ -1,4 +1,4 @@
-import { parseArgs } from "util";
+import { parseArgs } from "node:util";
 import { Crawler, type CrawlerOptions } from "./crawler";
 
 function parseNumber(s: string | undefined) {
@@ -22,6 +22,9 @@ async function main() {
   const { values, positionals } = parseArgs({
     args: Bun.argv,
     options: {
+      help: {
+        type: "boolean",
+      },
       concurrency: {
         type: "string",
       },
@@ -38,9 +41,26 @@ async function main() {
     allowPositionals: true,
   });
 
-  const url = positionals[2];
+  if (values.help) {
+    console.log(`Usage: crawler [options] <url>
 
+Options:
+  --help                      Show help information
+  --concurrency <number>      Set the maximum number of concurrent requests
+  --maxRequestsPerSecond <number>  Set the maximum number of requests per second
+  --followDepth <number>      Set the maximum depth to follow links
+  --timeout <number>          Set the timeout in milliseconds
+
+Example:
+  crawler --concurrency 5 --maxRequestsPerSecond 10 --followDepth 3 --timeout 5000 https://example.com
+`);
+    process.exit(0);
+  }
+
+  const url = positionals[2];
   if (!url) {
+    console.error("Error: No URL provided. Please specify a URL to crawl.");
+    process.exit(1);
     return;
   }
 
@@ -75,10 +95,6 @@ async function main() {
 
   const crawler = new Crawler(crawlerOptions);
   crawler.crawl(url);
-
-  while (crawler.crawling()) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
 }
 
 main();

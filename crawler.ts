@@ -1,7 +1,7 @@
-import { load } from "cheerio/slim";
 import { JobProcessor } from "./job-processor";
 import { EventEmitter } from "events";
 import { URLManager } from "./url-manager";
+import { load } from "cheerio";
 
 export type CrawlerOptions = {
   maxConcurrentRequests?: number;
@@ -26,7 +26,7 @@ export class Crawler {
 
   constructor(opts: Partial<CrawlerOptions> = {}) {
     this.#options = {
-      timeoutMs: 5000,
+      timeoutMs: 0,
       abortController: new AbortController(),
       maxDepth: 3,
       maxConcurrentRequests: 1,
@@ -68,6 +68,10 @@ export class Crawler {
   }
 
   #timeout() {
+    if (this.#options.timeoutMs <= 0) {
+      return;
+    }
+
     setTimeout(() => {
       this.#timedout = true;
       this.stop();
@@ -115,7 +119,13 @@ export class Crawler {
         switch (res.status % 100) {
           case 4:
             this.urlManager.error(url, res.status);
-            // Client error, don’t retry
+            if (res.status === 429) {
+              // ratelimited, may subside - better would be to check `Retry-After` header
+              throw new Error(
+                `Failed to fetch ${url} due to Too Many Requests ${res.statusText}`,
+              );
+            }
+            // Otherwise client error thats unlikely to change don’t retry
             return;
           case 5:
             this.urlManager.error(url, res.status);

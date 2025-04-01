@@ -1,15 +1,19 @@
 {
   "name": "monzo-webcrawler",
-  "module": "index.ts",
+  "module": "cli.ts",
   "type": "module",
+  "scripts": {
+    "build": "bun build --compile --minify --sourcemap ./cli.ts --outfile ./bin/crawl",
+    "dev": "bun build --compile ./cli.ts --outfile ./bin/crawl-dev --watch"
+  },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/cheerio": "^0.22.35"
   },
   "peerDependencies": {
     "typescript": "^5.8.2"
   },
   "dependencies": {
-    "@types/cheerio": "^0.22.35",
     "cheerio": "^1.0.0"
   }
 }

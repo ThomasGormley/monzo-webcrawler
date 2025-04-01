@@ -1,15 +1,45 @@
 # monzo-webcrawler
 
-To install dependencies:
+## Task
+
+We'd like you to write a simple web crawler in a programming language you're familiar with. Given a starting URL, the crawler should visit each URL it finds on the same domain. It should print each URL visited, and a list of links found on that page. The crawler should be limited to one subdomain - so when you start with *https://monzo.com/*, it would crawl all pages on the monzo.com website, but not follow external links, for example to facebook.com or community.monzo.com.
+
+We would like to see your own implementation of a web crawler. Please do not use frameworks like scrapy or go-colly which handle all the crawling behind the scenes or someone else's code. You are welcome to use libraries to handle things like HTML parsing.
+
+## Getting Started
+
+This project uses the [Bun](https://bun.sh) runtime. It is required for building and development.
+
+### To build the `crawl` executable:
+
+```bash
+bun run build
+```
+
+This will build an executable at `./bin/crawl` that can be used to run the web crawler
+
+### To install dependencies:
 
 ```bash
 bun install
 ```
 
-To run:
+### To develop:
 
 ```bash
-bun run index.ts
+bun run dev
 ```
 
-This project was created using `bun init` in bun v1.1.45. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
+This will build an executable at `./bin/crawl-dev` that can be used to run the web crawler during development. The `dev` script will watch the filesystem for changes, and rebuild on save
+
+## Usage
+
+Use `crawl --help` for full CLI help.
+
+```bash
+crawler --concurrency 5 --maxRequestsPerSecond 10 --followDepth 3 --timeout 5000 https://example.com
+```
+
+## Limitations
+
+- Websites that rely on JavaScript for content rendering cannot be crawled, as the CLI requires the HTML DOM to be fully available on initial load.
