@@ -3,7 +3,9 @@ import { JobProcessor } from "./job-processor";
 import { EventEmitter } from "events";
 import { URLManager } from "./url-manager";
 
-type CrawlerOptions = {
+export type CrawlerOptions = {
+  maxConcurrentRequests?: number;
+  maxRps?: number;
   timeoutMs: number;
   abortController: AbortController;
   jobProcessor?: JobProcessor;
@@ -26,11 +28,18 @@ export class Crawler {
     this.#options = {
       timeoutMs: 5000,
       abortController: new AbortController(),
-      maxDepth: 5,
+      maxDepth: 3,
+      maxConcurrentRequests: 1,
+      maxRps: 2,
       ...opts,
     } satisfies CrawlerOptions;
 
-    this.#processor = opts.jobProcessor ?? new JobProcessor();
+    this.#processor =
+      opts.jobProcessor ??
+      new JobProcessor({
+        maxConcurrentJobs: opts.maxConcurrentRequests,
+        maxRps: opts.maxRps,
+      });
     if (this.#options.onVisited) {
       this.#emitter.on("visited", this.#options.onVisited);
     }
