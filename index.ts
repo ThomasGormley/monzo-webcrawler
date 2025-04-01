@@ -7,10 +7,26 @@ async function main() {
   if (!url) {
     return;
   }
-  const crawler = new Crawler();
+  const crawler = new Crawler({
+    onVisited: ({ url, urls }) => {
+      console.log(`- ${url}`);
+      for (const u of urls) {
+        console.log(` - ${u}`);
+      }
+    },
+  });
 
-  const body = await crawler.crawl(url);
-  console.log({ body });
+  crawler.crawl(url);
+
+  while (crawler.crawling()) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
 }
 
 main();
+
+// TODO
+// 1. Depth limit
+// 2. Rate limiting
+// 3. error handling
+// 4. CLI

@@ -4,6 +4,8 @@ type QueuedJob = { job: Job; retryCount: number };
 
 export class JobProcessor {
   #maxConcurrentJobs = 5;
+  #interval = 10;
+  #lastJobProcessedAt: number | null = null;
   #queue: QueuedJob[] = [];
   #maxRetries = 5;
   #dlq: QueuedJob[] = [];
@@ -12,11 +14,16 @@ export class JobProcessor {
 
   constructor({
     maxConcurrentJobs,
+    maxRps,
   }: {
     maxConcurrentJobs?: number;
+    maxRps?: number;
   } = {}) {
     if (maxConcurrentJobs) {
       this.#maxConcurrentJobs = maxConcurrentJobs;
+    }
+    if (maxRps) {
+      this.#interval = maxRps / 1000;
     }
   }
 
@@ -40,6 +47,10 @@ export class JobProcessor {
     return this.#shouldProcess;
   }
 
+  deadletterQueue() {
+    return this.#dlq;
+  }
+
   #enqueueWithRetries(
     job: Job,
     { retryCount, delay }: { retryCount: number; delay?: number },
@@ -51,8 +62,22 @@ export class JobProcessor {
     this.#queue.push({ job, retryCount });
   }
 
+  async #ratelimit() {
+    if (!this.#lastJobProcessedAt) {
+      return;
+    }
+    const timeSinceLastJob = Date.now() - this.#lastJobProcessedAt;
+    if (timeSinceLastJob < this.#interval) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, this.#interval - timeSinceLastJob),
+      );
+    }
+  }
+
   async #processLoop() {
     while (this.#shouldProcess) {
+      await this.#ratelimit();
+
       const canTakeTask =
         this.#activeJobs < this.#maxConcurrentJobs && this.#queue.length > 0;
 
@@ -64,7 +89,7 @@ export class JobProcessor {
 
         const { job, retryCount } = next;
         if (retryCount === this.#maxRetries) {
-          this.#dlq.push({ job, retryCount: 0 });
+          this.#dlq.push({ job, retryCount });
           continue;
         }
 
@@ -80,6 +105,7 @@ export class JobProcessor {
           );
         } finally {
           this.#activeJobs--;
+          this.#lastJobProcessedAt = Date.now();
         }
       }
 

@@ -6,8 +6,9 @@ import { URLManager } from "./url-manager";
 type CrawlerOptions = {
   timeoutMs: number;
   abortController: AbortController;
-  urlManager?: URLManager;
+  jobProcessor?: JobProcessor;
   onVisited?: (args: CrawlerEvents["visited"][number]) => void;
+  maxDepth: number;
 };
 
 type CrawlerEvents = {
@@ -16,18 +17,20 @@ type CrawlerEvents = {
 
 export class Crawler {
   urlManager: URLManager = new URLManager();
-  #processor = new JobProcessor();
+  #processor;
   #timedout = false;
-  #options: CrawlerOptions;
+  #options: Omit<CrawlerOptions, "jobProcessor">;
   #emitter = new EventEmitter<CrawlerEvents>();
 
   constructor(opts: Partial<CrawlerOptions> = {}) {
     this.#options = {
       timeoutMs: 5000,
       abortController: new AbortController(),
+      maxDepth: 5,
       ...opts,
     } satisfies CrawlerOptions;
 
+    this.#processor = opts.jobProcessor ?? new JobProcessor();
     if (this.#options.onVisited) {
       this.#emitter.on("visited", this.#options.onVisited);
     }
@@ -36,7 +39,10 @@ export class Crawler {
   crawl(url: string) {
     this.#processor.process();
     this.#timeout();
-    this.#crawlUrl(url, { abortSignal: this.#options.abortController.signal });
+    this.#crawlUrl(url, {
+      abortSignal: this.#options.abortController.signal,
+      depth: 0,
+    });
   }
 
   stop() {
@@ -63,8 +69,13 @@ export class Crawler {
     url: string,
     opts: {
       abortSignal: AbortSignal;
+      depth: number;
     },
   ) {
+    if (opts.depth > this.#options.maxDepth) {
+      return;
+    }
+
     const shouldCrawl =
       !this.urlManager.hasVisited(url) && !this.urlManager.inQueue(url);
 
@@ -122,34 +133,14 @@ export class Crawler {
         }
 
         const body = await res.text();
-        const $ = load(body);
-
-        const toCrawl: string[] = [];
-        for (const element of $("a[href]")) {
-          const href = $(element).attr("href");
-          if (!href) {
-            continue;
-          }
-
-          try {
-            const resolvedUrl = new URL(href, reqUrl);
-            const isMatchingDomain = resolvedUrl.host === reqUrl.host;
-            if (isMatchingDomain) {
-              toCrawl.push(resolvedUrl.href);
-            }
-          } catch {
-            // skip invalid URLs
-          }
-        }
-
-        const dedupedToCrawl = [...new Set(toCrawl)];
+        const nextCrawlUrls = extractNextCrawlUrls(body, reqUrl);
 
         this.#emitter.emit("visited", {
           url,
-          urls: dedupedToCrawl,
+          urls: nextCrawlUrls,
         });
 
-        this.#crawlUrls(dedupedToCrawl, opts);
+        this.#crawlUrls(nextCrawlUrls, { ...opts, depth: opts.depth + 1 });
       } finally {
         this.urlManager.dequeued(url);
       }
@@ -160,12 +151,35 @@ export class Crawler {
     urls: string[],
     opts: {
       abortSignal: AbortSignal;
+      depth: number;
     },
   ) {
     for (const url of urls) {
-      this.#crawlUrl(url, {
-        abortSignal: opts.abortSignal,
-      });
+      this.#crawlUrl(url, opts);
     }
   }
+}
+
+function extractNextCrawlUrls(body: string, reqUrl: URL) {
+  const $ = load(body);
+  const toCrawl: string[] = [];
+  for (const element of $("a[href]")) {
+    const href = $(element).attr("href");
+    if (!href) {
+      continue;
+    }
+
+    try {
+      const resolvedUrl = new URL(href, reqUrl);
+      const isMatchingDomain = resolvedUrl.host === reqUrl.host;
+      if (isMatchingDomain) {
+        toCrawl.push(resolvedUrl.href);
+      }
+    } catch {
+      // skip invalid URLs
+    }
+  }
+
+  const dedupedToCrawl = [...new Set(toCrawl)];
+  return dedupedToCrawl;
 }

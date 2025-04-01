@@ -1,6 +1,7 @@
 import { test, expect, beforeAll, afterAll, mock } from "bun:test";
 import type { Server } from "bun";
 import { Crawler } from "./crawler";
+import { JobProcessor } from "./job-processor";
 
 let server: Server;
 let serverUrl: string;
@@ -77,6 +78,8 @@ beforeAll(async () => {
         `,
           { headers: { "Content-Type": "text/html" } },
         );
+      } else if (url.pathname === "/505.html") {
+        return new Response("505!", { status: 505 });
       }
       return new Response("404!", { status: 404 });
     },
@@ -185,4 +188,30 @@ test("it calls onVisited when it visits a URL", async () => {
     url: `${serverUrl}/test_page_3.html`,
     urls: [`${serverUrl}/test_page_1.html`],
   });
+});
+
+test("it does not record 4xx errors", async () => {
+  const crawler = new Crawler();
+  crawler.crawl(`${serverUrl}/does_not_exist.html`);
+
+  while (crawler.crawling()) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  expect(crawler.urlManager.allVisited().length).toBe(0);
+});
+
+test.skip("it retries 5xx errors", async () => {
+  const processor = new JobProcessor();
+  const crawler = new Crawler({ jobProcessor: processor });
+  crawler.crawl(`${serverUrl}/505.html`);
+
+  // TODO invert control of processor delay function
+  while (crawler.crawling()) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  const dlq = processor.deadletterQueue();
+  expect(dlq.length).toBe(1);
+  expect(dlq[0].retryCount).toBeGreaterThan(1);
 });

@@ -34,6 +34,12 @@ export class URLManager {
     });
   }
 
+  allErrored() {
+    return Array.from(
+      this.#metadata.values().filter((meta) => meta.state === "errored"),
+    );
+  }
+
   queued(url: string) {
     this.#queuedUrls.add(url);
   }
