@@ -1,4 +1,3 @@
-type URLMetadataState = "visited" | "queued" | "errored";
 type URLMetadata =
   | {
       state: "visited";

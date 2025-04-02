@@ -3,8 +3,8 @@
   "module": "cli.ts",
   "type": "module",
   "scripts": {
-    "build": "bun build --compile --minify --sourcemap ./cli.ts --outfile ./bin/crawl",
-    "dev": "bun build --compile ./cli.ts --outfile ./bin/crawl-dev --watch"
+    "build": "bun build --compile --minify --sourcemap ./src/cli.ts --outfile ./bin/crawl",
+    "dev": "bun build --compile ./src/cli.ts --outfile ./bin/crawl-dev --watch"
   },
   "devDependencies": {
     "@types/bun": "latest",
