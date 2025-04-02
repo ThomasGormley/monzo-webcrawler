@@ -41,14 +41,14 @@ async function main() {
     console.log(`Usage: crawler [options] <url>
 
 Options:
-  --help                      Show help information
-  --concurrency <number>      Set the maximum number of concurrent requests
+  --help                           Show help information
+  --concurrency <number>           Set the maximum number of concurrent requests
   --maxRequestsPerSecond <number>  Set the maximum number of requests per second
-  --followDepth <number>      Set the maximum depth to follow links
-  --timeout <number>          Set the timeout in milliseconds
+  --followDepth <number>           Set the maximum depth to follow links
+  --timeout <number>               Set the timeout in milliseconds
 
 Example:
-  crawler --concurrency 5 --maxRequestsPerSecond 10 --followDepth 3 --timeout 5000 https://example.com
+  crawl --concurrency 5 --maxRequestsPerSecond 10 --followDepth 3 --timeout 5000 https://example.com
 `);
     process.exit(0);
   }

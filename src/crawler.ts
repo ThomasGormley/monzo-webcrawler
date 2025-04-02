@@ -51,15 +51,20 @@ export class Crawler {
     }
   }
 
+  /*
+   * Entrypoint to the crawler class. It will kickoff the job processor and begin
+   * recursively adding URLs to the queue for crawling.
+   */
   crawl(url: string) {
     this.#processor.process();
-    this.#timeout();
+    this.#startTimeout();
     this.#crawlUrl(url, {
       abortSignal: this.#options.abortController.signal,
       depth: 0,
     });
   }
 
+  /* Cancels inflight requests and stops job processing */
   stop() {
     this.#options.abortController.abort();
     this.#processor.stop();
@@ -73,7 +78,7 @@ export class Crawler {
     return this.#timedout;
   }
 
-  #timeout() {
+  #startTimeout() {
     if (this.#options.timeoutMs <= 0) {
       return;
     }
@@ -169,6 +174,7 @@ export class Crawler {
         this.#crawlUrls(nextCrawlUrls, { ...opts, depth: opts.depth + 1 });
       } catch (e) {
         this.#emitter.emit("error", { url, error: e });
+        throw e
       } finally {
         this.urlManager.dequeued(url);
       }
