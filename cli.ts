@@ -63,7 +63,7 @@ Example:
     onVisited: ({ url, urls }) => {
       console.log(`- ${url}`);
       for (const u of urls) {
-        console.log(` - ${u}`);
+        console.log(` = ${u}`);
       }
     },
     onError: ({ url, error }) => {

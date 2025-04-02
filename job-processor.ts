@@ -43,6 +43,9 @@ export class JobProcessor {
   }
 
   stop() {
+    if (this.#dlq.length > 0) {
+      console.warn(`${this.#dlq.length} messages in the deadletter queue`);
+    }
     this.#shouldProcess = false;
   }
 

@@ -94,8 +94,8 @@ beforeAll(async () => {
         `,
           { headers: { "Content-Type": "text/html" } },
         );
-      } else if (url.pathname === "/505.html") {
-        return new Response("505!", { status: 505 });
+      } else if (url.pathname === "/504.html") {
+        return new Response("504!", { status: 504 });
       }
       return new Response("404!", { status: 404 });
     },
@@ -208,7 +208,7 @@ test("it does not record 4xx errors", async () => {
 test("it retries 5xx errors", async () => {
   const processor = new JobProcessor({ delayFn: () => 0 });
   const crawler = new Crawler({ jobProcessor: processor });
-  crawler.crawl(`${serverUrl}/505.html`);
+  crawler.crawl(`${serverUrl}/504.html`);
 
   await waitForCrawler(crawler);
 
@@ -267,5 +267,7 @@ async function waitForCrawler(crawler: Crawler, timeoutMs = 2000) {
   while (crawler.crawling() && Date.now() - start < timeoutMs) {
     await new Promise((r) => setTimeout(r, 200));
   }
-  if (crawler.crawling()) throw new Error("Crawler timed out");
+  if (crawler.crawling()) {
+    throw new Error("Crawler timed out");
+  }
 }

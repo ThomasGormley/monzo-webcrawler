@@ -79,6 +79,7 @@ export class Crawler {
     }
 
     setTimeout(() => {
+      console.info("Timeout limit reached, cancelling inflight requests");
       this.#timedout = true;
       this.stop();
     }, this.#options.timeoutMs);
@@ -129,21 +130,16 @@ export class Crawler {
 
         switch (res.status % 100) {
           case 4:
+          case 5:
             this.urlManager.error(url, res.status);
-            if (res.status === 429) {
-              // ratelimited, may subside - better would be to check `Retry-After` header
+            if (isTransientError(res.status)) {
+              // if its transient, throw to retry
               throw new Error(
                 `Failed to fetch ${url} due to ${res.statusText}`,
               );
             }
             // Otherwise client error thats unlikely to change, don’t retry
             return;
-          case 5:
-            this.urlManager.error(url, res.status);
-            // server error, throw to retry
-            throw new Error(
-              `Failed to fetch ${url}, status: ${res.statusText}`,
-            );
           default: // fallthrough
         }
 
@@ -190,6 +186,10 @@ export class Crawler {
       this.#crawlUrl(url, opts);
     }
   }
+}
+
+function isTransientError(status: number) {
+  return [408, 429, 500, 502, 503, 504].includes(status);
 }
 
 function extractNextCrawlUrls(body: string, reqUrl: URL) {
