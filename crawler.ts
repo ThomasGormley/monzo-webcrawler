@@ -10,11 +10,13 @@ export type CrawlerOptions = {
   abortController: AbortController;
   jobProcessor?: JobProcessor;
   onVisited?: (args: CrawlerEvents["visited"][number]) => void;
+  onError?: (args: CrawlerEvents["error"][number]) => void;
   maxDepth: number;
 };
 
 type CrawlerEvents = {
   visited: { url: string; urls: string[] }[];
+  error: { url: string; error: unknown }[];
 };
 
 export class Crawler {
@@ -40,8 +42,12 @@ export class Crawler {
         maxConcurrentJobs: opts.maxConcurrentRequests,
         maxRps: opts.maxRps,
       });
+
     if (this.#options.onVisited) {
       this.#emitter.on("visited", this.#options.onVisited);
+    }
+    if (this.#options.onError) {
+      this.#emitter.on("error", this.#options.onError);
     }
   }
 
@@ -79,13 +85,18 @@ export class Crawler {
   }
 
   #crawlUrl(
-    url: string,
+    urlToCrawl: string,
     opts: {
       abortSignal: AbortSignal;
       depth: number;
     },
   ) {
     if (opts.depth > this.#options.maxDepth) {
+      return;
+    }
+
+    const url = normaliseUrl(urlToCrawl);
+    if (url.trim() === "") {
       return;
     }
 
@@ -112,7 +123,7 @@ export class Crawler {
 
         const reqUrl = new URL(url);
         const res = await fetch(url, {
-          headers: { "user-agent": "Mz-Webcrawler/1.0 (testing)" },
+          headers: { "user-agent": "Mz-Webcrawler/1.0" },
           signal: opts.abortSignal,
         });
 
@@ -122,10 +133,10 @@ export class Crawler {
             if (res.status === 429) {
               // ratelimited, may subside - better would be to check `Retry-After` header
               throw new Error(
-                `Failed to fetch ${url} due to Too Many Requests ${res.statusText}`,
+                `Failed to fetch ${url} due to ${res.statusText}`,
               );
             }
-            // Otherwise client error thats unlikely to change don’t retry
+            // Otherwise client error thats unlikely to change, don’t retry
             return;
           case 5:
             this.urlManager.error(url, res.status);
@@ -139,8 +150,8 @@ export class Crawler {
         this.urlManager.persistVisited(url);
         const resUrl = new URL(res.url);
 
-        const redirected = resUrl.host !== reqUrl.host;
-        if (redirected) {
+        const redirectedExternally = resUrl.host !== reqUrl.host;
+        if (redirectedExternally) {
           this.#emitter.emit("visited", { url, urls: [] });
           return;
         }
@@ -160,6 +171,8 @@ export class Crawler {
         });
 
         this.#crawlUrls(nextCrawlUrls, { ...opts, depth: opts.depth + 1 });
+      } catch (e) {
+        this.#emitter.emit("error", { url, error: e });
       } finally {
         this.urlManager.dequeued(url);
       }
@@ -201,4 +214,21 @@ function extractNextCrawlUrls(body: string, reqUrl: URL) {
 
   const dedupedToCrawl = [...new Set(toCrawl)];
   return dedupedToCrawl;
+}
+
+function normaliseUrl(u: string) {
+  try {
+    const url = new URL(u);
+
+    // strip the hash e.g.
+    // `/page_1.html#header` & `/page_1.html#body` should be equal
+    url.hash = "";
+
+    // sort query parameters e.g.
+    // `?b=2&a=1` & `?a=1&b=2` should be equal
+    url.searchParams.sort();
+    return url.toString();
+  } catch {
+    return "";
+  }
 }

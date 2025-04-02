@@ -78,6 +78,22 @@ beforeAll(async () => {
         `,
           { headers: { "Content-Type": "text/html" } },
         );
+      } else if (url.pathname === "/with_hashes.html") {
+        return new Response(
+          `
+          <a href="/with_hashes.html#header">Link to Header</a>
+          <a href="/with_hashes.html#body">Link to Body</a>
+        `,
+          { headers: { "Content-Type": "text/html" } },
+        );
+      } else if (url.pathname === "/with_query_params.html") {
+        return new Response(
+          `
+          <a href="/with_query_params.html?a=1&b=2">Link to A1B2</a>
+          <a href="/with_query_params.html?b=2&a=1">Link to B2A1</a>
+        `,
+          { headers: { "Content-Type": "text/html" } },
+        );
       } else if (url.pathname === "/505.html") {
         return new Response("505!", { status: 505 });
       }
@@ -95,9 +111,7 @@ test("it visits all pages", async () => {
   const crawler = new Crawler();
   crawler.crawl(`${serverUrl}/test_page_1.html`);
 
-  while (crawler.crawling()) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
+  await waitForCrawler(crawler);
 
   expect(crawler.urlManager.allVisited().length).toBe(3);
   expect(crawler.urlManager.hasVisited(`${serverUrl}/test_page_1.html`)).toBe(
@@ -117,9 +131,7 @@ test("it does not visit external links", async () => {
   const crawler = new Crawler();
   crawler.crawl(`${serverUrl}/test_page_with_external_link.html`);
 
-  while (crawler.crawling()) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
+  await waitForCrawler(crawler);
 
   expect(crawler.urlManager.allVisited().length).toBe(1);
   expect(crawler.urlManager.hasVisited(`https://thomasgormley.dev`)).toBe(
@@ -133,9 +145,7 @@ test("it does nothing with non-HTML pages", async () => {
   const crawler = new Crawler();
   crawler.crawl(`${serverUrl}/not_html.txt`);
 
-  while (crawler.crawling()) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
+  await waitForCrawler(crawler);
 
   expect(crawler.urlManager.allVisited().length).toBe(1);
   expect(crawler.urlManager.hasVisited(`${serverUrl}/not_html.txt`)).toBe(true);
@@ -145,16 +155,14 @@ test("it does nothing with non-HTML pages", async () => {
 
 test("it stops after configured timeout", async () => {
   const abortController = new AbortController();
-  const timeoutMs = 200;
+  const timeoutMs = 100;
   const crawler = new Crawler({
     timeoutMs,
     abortController,
   });
   crawler.crawl(`${serverUrl}/slow_handler.html`);
 
-  while (crawler.crawling()) {
-    await new Promise((resolve) => setTimeout(resolve, timeoutMs));
-  }
+  await waitForCrawler(crawler);
 
   expect(crawler.timedout()).toBe(true);
   expect(abortController.signal.aborted).toBe(true);
@@ -179,9 +187,7 @@ test("it calls onVisited when it visits a URL", async () => {
 
   crawler.crawl(`${serverUrl}/test_page_1.html`);
 
-  while (crawler.crawling()) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
+  await waitForCrawler(crawler);
 
   expect(callCount).toBe(3);
   expect(gotArgs).toEqual({
@@ -194,24 +200,72 @@ test("it does not record 4xx errors", async () => {
   const crawler = new Crawler();
   crawler.crawl(`${serverUrl}/does_not_exist.html`);
 
-  while (crawler.crawling()) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
+  await waitForCrawler(crawler);
 
   expect(crawler.urlManager.allVisited().length).toBe(0);
 });
 
-test.skip("it retries 5xx errors", async () => {
-  const processor = new JobProcessor();
+test("it retries 5xx errors", async () => {
+  const processor = new JobProcessor({ delayFn: () => 0 });
   const crawler = new Crawler({ jobProcessor: processor });
   crawler.crawl(`${serverUrl}/505.html`);
 
-  // TODO invert control of processor delay function
-  while (crawler.crawling()) {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
+  await waitForCrawler(crawler);
 
   const dlq = processor.deadletterQueue();
   expect(dlq.length).toBe(1);
   expect(dlq[0].retryCount).toBeGreaterThan(1);
 });
+
+test("it does not consider URL hashes", async () => {
+  const crawler = new Crawler();
+  crawler.crawl(`${serverUrl}/with_hashes.html`);
+
+  await waitForCrawler(crawler);
+
+  expect(crawler.urlManager.allVisited().length).toBe(1);
+  expect(crawler.urlManager.hasVisited(`${serverUrl}/with_hashes.html`)).toBe(
+    true,
+  );
+
+  crawler.stop();
+});
+
+test("it normalises query string order", async () => {
+  const crawler = new Crawler();
+  crawler.crawl(`${serverUrl}/with_query_params.html`);
+
+  await waitForCrawler(crawler);
+
+  expect(crawler.urlManager.allVisited().length).toBe(2);
+  expect(
+    crawler.urlManager.hasVisited(`${serverUrl}/with_query_params.html`),
+  ).toBe(true);
+
+  // this query string appears twice in the page
+  expect(
+    crawler.urlManager.hasVisited(
+      `${serverUrl}/with_query_params.html?a=1&b=2`,
+    ),
+  ).toBe(true);
+
+  crawler.stop();
+});
+
+test("it handles an invalid URL", async () => {
+  const crawler = new Crawler();
+  crawler.crawl("not_a_url");
+
+  await waitForCrawler(crawler);
+
+  expect(crawler.urlManager.allVisited().length).toBe(0);
+});
+
+// helper function to block and await the crawler queue to process
+async function waitForCrawler(crawler: Crawler, timeoutMs = 2000) {
+  const start = Date.now();
+  while (crawler.crawling() && Date.now() - start < timeoutMs) {
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  if (crawler.crawling()) throw new Error("Crawler timed out");
+}

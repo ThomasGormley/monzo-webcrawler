@@ -22,9 +22,9 @@ export class URLManager {
   }
 
   allVisited() {
-    return Array.from(
-      this.#metadata.values().filter((meta) => meta.state === "visited"),
-    );
+    return Array.from(this.#metadata.entries())
+      .filter(([key, meta]) => meta.state === "visited")
+      .map(([key, meta]) => ({ key, ...meta }));
   }
 
   error(url: string, status: number) {

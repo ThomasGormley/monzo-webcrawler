@@ -2,6 +2,10 @@ export type Job = ({ retryCount }: { retryCount: number }) => Promise<void>;
 
 type QueuedJob = { job: Job; retryCount: number };
 
+type DelayFn = (retryCount: number) => number;
+const exponentialDelayWithJitter = (retryCount: number) =>
+  100 * retryCount + Math.random() * 50;
+
 export class JobProcessor {
   #maxConcurrentJobs = 5;
   #interval = 10;
@@ -11,19 +15,26 @@ export class JobProcessor {
   #dlq: QueuedJob[] = [];
   #activeJobs = 0;
   #shouldProcess = true;
+  #delayFn: DelayFn = exponentialDelayWithJitter;
 
   constructor({
     maxConcurrentJobs,
     maxRps,
+    delayFn,
   }: {
     maxConcurrentJobs?: number;
     maxRps?: number;
+    delayFn?: DelayFn;
   } = {}) {
     if (maxConcurrentJobs) {
       this.#maxConcurrentJobs = maxConcurrentJobs;
     }
     if (maxRps) {
       this.#interval = maxRps / 1000;
+    }
+
+    if (delayFn) {
+      this.#delayFn = delayFn;
     }
   }
 
@@ -100,7 +111,7 @@ export class JobProcessor {
           setTimeout(() =>
             this.#enqueueWithRetries(job, {
               retryCount: retryCount + 1,
-              delay: 100 * retryCount + Math.random() * 50, // exponential delay with jitter
+              delay: this.#delayFn(retryCount),
             }),
           );
         } finally {

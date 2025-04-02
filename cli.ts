@@ -6,16 +6,12 @@ function parseNumber(s: string | undefined) {
     return undefined;
   }
 
-  try {
-    const num = Number(s);
-    if (num < 0) {
-      throw new Error();
-    }
-
-    return num;
-  } catch {
+  const num = Number(s);
+  if (isNaN(num) || num < 0) {
     throw new Error(`Invalid value: ${s}, must be a number greater than zero`);
   }
+
+  return num;
 }
 
 async function main() {
@@ -61,7 +57,6 @@ Example:
   if (!url) {
     console.error("Error: No URL provided. Please specify a URL to crawl.");
     process.exit(1);
-    return;
   }
 
   const crawlerOptions: Partial<CrawlerOptions> = {
@@ -70,6 +65,9 @@ Example:
       for (const u of urls) {
         console.log(` - ${u}`);
       }
+    },
+    onError: ({ url, error }) => {
+      console.error(`Error while visiting URL: ${url}, ${error}`);
     },
   };
 
