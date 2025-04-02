@@ -47,3 +47,4 @@ crawl --concurrency 5 --maxRequestsPerSecond 10 --followDepth 3 --timeout 5000 h
 - Websites that rely on JavaScript for content rendering cannot be crawled, as the CLI requires the HTML DOM to be fully available on initial load.
 - Does not respect robots.txt
 - Does not respect `Retry-After` HTTP response header
+- Crawler state is not persisted
