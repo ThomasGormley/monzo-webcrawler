@@ -1,6 +1,6 @@
 {
   "name": "monzo-webcrawler",
-  "module": "cli.ts",
+  "module": "src/cli.ts",
   "type": "module",
   "scripts": {
     "build": "bun build --compile --minify --sourcemap ./src/cli.ts --outfile ./bin/crawl",
